@@ -10,8 +10,15 @@ export type PrismaQueueClient = Pick<
   "$executeRaw" | "$executeRawUnsafe" | "$queryRaw" | "$queryRawUnsafe"
 > & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  $transaction<P extends Promise<any>[]>(arg: [...P]): Promise<UnwrapTuple<P>>;
-  $transaction<R>(fn: (client: ITXClient) => Promise<R>, options?: { timeout?: number }): Promise<R>;
+  $transaction<P extends Prisma.PrismaPromise<any>[]>(
+    arg: [...P],
+    options?: { isolationLevel?: Prisma.TransactionIsolationLevel },
+  ): Promise<UnwrapTuple<P>>;
+
+  $transaction<R>(
+    fn: (client: ITXClient) => Promise<R>,
+    options?: { maxWait?: number; timeout?: number; isolationLevel?: Prisma.TransactionIsolationLevel },
+  ): Promise<R>;
 } & {
   queueJob: QueueJobModel;
 };
