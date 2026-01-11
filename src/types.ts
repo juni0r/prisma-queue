@@ -1,4 +1,4 @@
-import type { ITXClientDenyList } from "@prisma/client/runtime/client";
+import type { ITXClientDenyList, UnwrapTuple } from "@prisma/client/runtime/client";
 import { Prisma, PrismaClient } from "../prisma";
 import { QueueJobModel as PrismaQueueJob } from "../prisma/client/models";
 import type { PrismaJob } from "./PrismaJob";
@@ -9,8 +9,12 @@ export type PrismaQueueClient = Pick<
   PrismaClient,
   "$executeRaw" | "$executeRawUnsafe" | "$queryRaw" | "$queryRawUnsafe"
 > & {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  $transaction<P extends Promise<any>[]>(arg: [...P]): Promise<UnwrapTuple<P>>;
   $transaction<R>(fn: (client: ITXClient) => Promise<R>, options?: { timeout?: number }): Promise<R>;
-} & { queueJob: QueueJobModel };
+} & {
+  queueJob: QueueJobModel;
+};
 
 export type ITXClient = Omit<PrismaQueueClient, ITXClientDenyList>;
 
