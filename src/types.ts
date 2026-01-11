@@ -7,8 +7,10 @@ export type Simplify<T> = { [KeyType in keyof T]: T[KeyType] } & {};
 
 export type PrismaQueueClient = Pick<
   PrismaClient,
-  "$transaction" | "$executeRaw" | "$executeRawUnsafe" | "$queryRaw" | "$queryRawUnsafe"
-> & { queueJob: QueueJobModel };
+  "$executeRaw" | "$executeRawUnsafe" | "$queryRaw" | "$queryRawUnsafe"
+> & {
+  $transaction<R>(fn: (client: ITXClient) => Promise<R>, options?: { timeout?: number }): Promise<R>;
+} & { queueJob: QueueJobModel };
 
 export type ITXClient = Omit<PrismaQueueClient, ITXClientDenyList>;
 
