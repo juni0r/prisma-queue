@@ -145,7 +145,7 @@ export class PrismaQueue<
   /**
    * Gets the Prisma delegate associated with the queue job model.
    */
-  private get model(): Prisma.QueueJobDelegate {
+  private get model() {
     const queueJobKey = uncapitalize(this.config.modelName) as "queueJob";
     return this.#prisma[queueJobKey];
   }

@@ -1,9 +1,9 @@
 import { Prisma } from "../prisma";
-import type { DatabaseJob, ITXClient } from "./types";
+import type { DatabaseJob, ITXClient, JobUpdate, QueueJobModel } from "./types";
 // import { debug } from "./utils";
 
 export type PrismaJobOptions = {
-  model: Prisma.QueueJobDelegate;
+  model: QueueJobModel;
   client: ITXClient;
 };
 
@@ -11,7 +11,7 @@ export type PrismaJobOptions = {
  * Represents a job within a Prisma-managed queue.
  */
 export class PrismaJob<Payload, Result> {
-  #model: Prisma.QueueJobDelegate;
+  #model: QueueJobModel;
   #client: ITXClient;
   #record: DatabaseJob<Payload, Result>;
 
@@ -120,7 +120,7 @@ export class PrismaJob<Payload, Result> {
    * Updates the job record in the database with new data.
    * @param data - The new data to be merged with the existing job record.
    */
-  public async update(data: Prisma.QueueJobUpdateInput): Promise<DatabaseJob<Payload, Result>> {
+  public async update(data: JobUpdate): Promise<DatabaseJob<Payload, Result>> {
     const record = (await this.#model.update({
       where: { id: this.id },
       data,
