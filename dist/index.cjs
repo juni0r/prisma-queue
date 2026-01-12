@@ -192,7 +192,7 @@ var PrismaClient = getPrismaClientClass();
 
 // src/PrismaJob.ts
 var PrismaJob = class {
-  #model;
+  #tableName;
   #client;
   #record;
   id;
@@ -203,8 +203,8 @@ var PrismaJob = class {
    * @param model - The Prisma delegate used for database operations related to the job.
    * @param client - The Prisma client for executing arbitrary queries.
    */
-  constructor(record, { model, client }) {
-    this.#model = model;
+  constructor(record, { tableName, client }) {
+    this.#tableName = tableName;
     this.#client = client;
     this.#record = record;
     this.id = record.id;
@@ -277,7 +277,7 @@ var PrismaJob = class {
    * Fetches the latest job record from the database and updates the internal state.
    */
   async fetch() {
-    const record = await this.#model.findUnique({
+    const record = await this.#client.queueJob.findUnique({
       where: { id: this.id }
     });
     this.#assign(record);
@@ -288,7 +288,7 @@ var PrismaJob = class {
    * @param data - The new data to be merged with the existing job record.
    */
   async update(data) {
-    const record = await this.#model.update({
+    const record = await this.#client.queueJob.update({
       where: { id: this.id },
       data
     });
@@ -299,7 +299,7 @@ var PrismaJob = class {
    * Deletes the job from the database.
    */
   async delete() {
-    const record = await this.#model.delete({
+    const record = await this.#client.queueJob.delete({
       where: { id: this.id }
     });
     return record;
@@ -311,7 +311,7 @@ var PrismaJob = class {
   async isLocked() {
     try {
       await this.#client.$executeRawUnsafe(
-        `SELECT "id" FROM "public"."queue_jobs" WHERE "id" = $1 FOR UPDATE NOWAIT`,
+        `SELECT "id" FROM "public"."${this.#tableName}" WHERE "id" = $1 FOR UPDATE NOWAIT`,
         this.id
       );
       return false;
@@ -344,25 +344,8 @@ var serializeError = (err) => {
   };
 };
 
-// src/utils/prisma.ts
-var toSnakeCase = (str) => {
-  return str.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-};
-var getTableName = (prisma, modelName) => {
-  try {
-    const datamodel = prisma._runtimeDataModel;
-    const model = datamodel.models["QueueJob"];
-    if (model?.dbName) {
-      return model.dbName;
-    }
-  } catch {
-  }
-  return toSnakeCase(modelName);
-};
-
 // src/utils/string.ts
 var escape = (name) => '"' + name.replace(/"/g, '""') + '"';
-var uncapitalize = (string) => string.charAt(0).toLowerCase() + string.slice(1);
 
 // src/utils/stringify.ts
 function prepareForJson(originalValue) {
@@ -465,11 +448,13 @@ var PrismaQueue = class extends import_events.EventEmitter {
     super();
     this.options = options;
     this.worker = worker;
-    this.prisma = new PrismaClient(this.options.client);
+    this.client = new PrismaClient({
+      adapter: options.adapter,
+      log: options.log ?? []
+    });
     const {
       name = "default",
-      modelName = "QueueJob",
-      tableName = getTableName(this.prisma, modelName),
+      tableName = "queue_jobs",
       maxAttempts = null,
       maxConcurrency = DEFAULT_MAX_CONCURRENCY,
       pollInterval = DEFAULT_POLL_INTERVAL,
@@ -483,7 +468,6 @@ var PrismaQueue = class extends import_events.EventEmitter {
     (0, import_node_assert.default)(jobInterval >= 10, "jobInterval must be more than 10 ms");
     this.name = name;
     this.config = {
-      modelName,
       tableName,
       maxAttempts,
       maxConcurrency,
@@ -504,19 +488,12 @@ var PrismaQueue = class extends import_events.EventEmitter {
       );
     }
   }
-  prisma;
+  client;
   name;
   config;
   concurrency = 0;
   stopped = true;
   abortController = new AbortController();
-  /**
-   * Gets the Prisma delegate associated with the queue job model.
-   */
-  get model() {
-    const queueJobKey = uncapitalize(this.config.modelName);
-    return this.prisma[queueJobKey];
-  }
   /**
    * Starts the job processing in the queue.
    */
@@ -570,10 +547,8 @@ var PrismaQueue = class extends import_events.EventEmitter {
     debug(`enqueue`, this.name, payloadOrFunction, options);
     const { name: queueName, config: config2 } = this;
     const { key = null, cron = null, maxAttempts = config2.maxAttempts, priority = 0, runAt } = options;
-    const queueJobKey = uncapitalize(this.config.modelName);
     const now = /* @__PURE__ */ new Date();
-    const record = await this.prisma.$transaction(async (client) => {
-      const model = client[queueJobKey];
+    const record = await this.client.$transaction(async (client) => {
       const payload = payloadOrFunction instanceof Function ? await payloadOrFunction(client) : payloadOrFunction;
       const data = {
         queue: queueName,
@@ -586,7 +561,7 @@ var PrismaQueue = class extends import_events.EventEmitter {
         runAt: runAt ?? now
       };
       if (key && runAt) {
-        const { count } = await model.deleteMany({
+        const { count } = await client.queueJob.deleteMany({
           where: {
             queue: queueName,
             key,
@@ -599,17 +574,17 @@ var PrismaQueue = class extends import_events.EventEmitter {
         if (count > 0) {
           debug(`deleted ${count} conflicting upcoming queue jobs`);
         }
-        return await model.upsert({
+        return await client.queueJob.upsert({
           where: { key_runAt: { key, runAt } },
           create: data,
           update: data
         });
       }
-      return await model.create({ data });
+      return await client.queueJob.create({ data });
     });
     const job = new PrismaJob(record, {
-      model: this.model,
-      client: this.prisma
+      tableName: this.config.tableName,
+      client: this.client
     });
     this.emit("enqueue", job);
     return job;
@@ -685,9 +660,8 @@ var PrismaQueue = class extends import_events.EventEmitter {
     const { name: queueName } = this;
     const { tableName: tableNameRaw, deleteOn } = this.config;
     const tableName = escape(tableNameRaw);
-    const queueJobKey = uncapitalize(this.config.modelName);
     const now = /* @__PURE__ */ new Date();
-    const job = await this.prisma.$transaction(
+    const job = await this.client.$transaction(
       async (client) => {
         const rows = await client.$queryRawUnsafe(
           `UPDATE ${tableName} SET "processedAt" = $2, "attempts" = "attempts" + 1
@@ -712,13 +686,13 @@ var PrismaQueue = class extends import_events.EventEmitter {
         }
         const { id, payload, attempts, maxAttempts } = rows[0];
         const job2 = new PrismaJob(rows[0], {
-          model: client[queueJobKey],
+          tableName: this.config.tableName,
           client
         });
         let result;
         try {
           debug(`starting worker for job({id: ${id}, payload: ${JSON.stringify(payload)}})`);
-          result = await this.worker(job2, this.prisma);
+          result = await this.worker(job2, this.client);
           debug(`finished worker for job({id: ${id}, payload: ${JSON.stringify(payload)}})`);
           const date = /* @__PURE__ */ new Date();
           await job2.update({ finishedAt: date, progress: 100, result, error: prismaNamespace_exports.DbNull });
@@ -777,7 +751,7 @@ var PrismaQueue = class extends import_events.EventEmitter {
       where.runAt = { lte: date };
       where.AND = { OR: [{ notBefore: { lte: date } }, { notBefore: null }] };
     }
-    return await this.model.count({
+    return await this.client.queueJob.count({
       where
     });
   }

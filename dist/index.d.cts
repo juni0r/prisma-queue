@@ -2485,12 +2485,11 @@ type DatabaseJob<Payload, Result> = Simplify<Omit<QueueJobModel, "payload" | "re
 }>;
 type JobCreator<T extends JobPayload> = (client: ITXClient) => Promise<T>;
 type JobWorker<T extends JobPayload = JobPayload, U extends JobResult = JobResult> = (job: PrismaJob<T, U>, client: ITXClient) => Promise<U>;
-type ClientOptions = Pick<PrismaClientOptions, "log"> & {
-    adapter: PrismaPg;
-};
+type Adapter = PrismaPg;
+type Log = PrismaClientOptions["log"];
 
 type PrismaJobOptions = {
-    model: QueueJobDelegate;
+    tableName: string;
     client: ITXClient;
 };
 /**
@@ -2506,7 +2505,7 @@ declare class PrismaJob<Payload, Result> {
      * @param model - The Prisma delegate used for database operations related to the job.
      * @param client - The Prisma client for executing arbitrary queries.
      */
-    constructor(record: DatabaseJob<Payload, Result>, { model, client }: PrismaJobOptions);
+    constructor(record: DatabaseJob<Payload, Result>, { tableName, client }: PrismaJobOptions);
     /**
      * Gets the current job record.
      */
@@ -2565,13 +2564,13 @@ declare class PrismaJob<Payload, Result> {
 }
 
 type PrismaQueueOptions = {
-    client: ClientOptions;
+    adapter: Adapter;
+    log?: Log;
     name?: string;
     maxAttempts?: number | null;
     maxConcurrency?: number;
     pollInterval?: number;
     jobInterval?: number;
-    modelName?: string;
     tableName?: string;
     deleteOn?: "success" | "failure" | "always" | "never";
     /**
@@ -2605,7 +2604,7 @@ interface PrismaQueue<T extends JobPayload = JobPayload, U extends JobResult = J
 declare class PrismaQueue<T extends JobPayload = JobPayload, U extends JobResult = JobResult> extends EventEmitter {
     private options;
     worker: JobWorker<T, U>;
-    prisma: PrismaClient;
+    client: PrismaClient;
     private name;
     private config;
     private concurrency;
@@ -2617,10 +2616,6 @@ declare class PrismaQueue<T extends JobPayload = JobPayload, U extends JobResult
      * @param worker - The worker function that processes jobs.
      */
     constructor(options: PrismaQueueOptions, worker: JobWorker<T, U>);
-    /**
-     * Gets the Prisma delegate associated with the queue job model.
-     */
-    private get model();
     /**
      * Starts the job processing in the queue.
      */
@@ -2697,4 +2692,4 @@ declare function restoreFromJson<T = unknown>(preparedValue: InputJsonValue): T;
  */
 declare const createQueue: <T extends JobPayload = JobPayload, U extends JobResult = JobResult>(options: PrismaQueueOptions, worker: JobWorker<T, U>) => PrismaQueue<T, U>;
 
-export { type ClientOptions, type DatabaseJob, type EnqueueOptions, type ITXClient, type JobCreator, type JobPayload, type JobResult, type JobWorker, PrismaJob, type PrismaJobOptions, PrismaQueue, type PrismaQueueEvents, type PrismaQueueOptions, type ScheduleOptions, type Simplify, createQueue, prepareForJson, restoreFromJson };
+export { type Adapter, type DatabaseJob, type EnqueueOptions, type ITXClient, type JobCreator, type JobPayload, type JobResult, type JobWorker, type Log, PrismaJob, type PrismaJobOptions, PrismaQueue, type PrismaQueueEvents, type PrismaQueueOptions, type ScheduleOptions, type Simplify, createQueue, prepareForJson, restoreFromJson };
