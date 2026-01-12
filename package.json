@@ -38,7 +38,7 @@
     "coverage": "DEBUG=prisma-queue,prisma-query vitest --run --pool=forks --coverage",
     "dev": "DEBUG=prisma-queue vitest --watch --pool=forks --reporter=dot",
     "test": "pnpm run lint && pnpm run prettycheck && pnpm run typecheck && pnpm run spec",
-    "prepare": "prisma generate",
+    "dev:prepare": "prisma generate",
     "reset": "prisma db push --force-reset && prisma generate",
     "prepublishOnly": "pnpm run build",
     "with-env": "dotenv -e ./.env --"
