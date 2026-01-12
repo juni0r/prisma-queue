@@ -16,7 +16,7 @@ export type PrismaQueueClient = Pick<
   ): Promise<UnwrapTuple<P>>;
 
   $transaction<R>(
-    fn: (client: ITXClient) => Promise<R>,
+    fn: (client: Omit<PrismaClient, ITXClientDenyList>) => Promise<R>,
     options?: { maxWait?: number; timeout?: number; isolationLevel?: Prisma.TransactionIsolationLevel },
   ): Promise<R>;
 } & {
