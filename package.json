@@ -1,5 +1,5 @@
 {
-  "name": "@mgcrea/prisma-queue",
+  "name": "@juni0r/prisma-queue",
   "version": "1.14.0",
   "author": "Olivier Louvignes <olivier@mgcrea.io>",
   "repository": "github:mgcrea/fastify-session-prisma-store",
